@@ -9,43 +9,35 @@ from dns.aliyun import AliApi
 from dns.huawei import HuaWeiApi
 from log import Logger
 import traceback
+import configparser
+import json
 
-#可以从https://shop.hostmonit.com获取
-KEY = "o1zrmHAF"
+file = 'src/config.ini'
+# 创建配置文件对象
+con = configparser.ConfigParser()
 
-#CM:移动 CU:联通 CT:电信  AB:境外 DEF:默认
-#修改需要更改的dnspod域名和子域名
-DOMAINS = {
-    "hostxxnit.com": {"@": ["CM","CU","CT"], "shop": ["CM", "CU", "CT"], "stock": ["CM","CU","CT"]},
-    "484848.xyz": {"@": ["CM","CU","CT"], "shop": ["CM","CU","CT"]}
-}
+# 读取文件
+con.read(file, encoding='utf-8')
+# 获取特定section
+items = con.items('DEFAULT') # 返回结果为元组
 
-#解析生效条数 免费的DNSPod相同线路最多支持2条解析
-AFFECT_NUM = 2
+# 可以通过dict方法转换为字典
+items = dict(items)
 
-#DNS服务商 如果使用DNSPod改为1 如果使用阿里云解析改成2  如果使用华为云解析改成3
-DNS_SERVER = 1
+KEY = items['key']
+DOMAINS = json.loads(items['domains'])
+AFFECT_NUM = int(items['affect_num'])
+DNS_SERVER = int(items['dns_server'])
+REGION_HW = items['region_hw']
+REGION_ALI = items['region_ali']
+TTL = int(items['ttl'])
+TYPE = items['type']
+SECRETID = items['secretid']
+SECRETKEY = items['secretkey']
+TIMES = int(items['times'])
 
-#如果使用华为云解析 需要从API凭证-项目列表中获取
-REGION_HW = 'cn-east-3'
 
-#如果使用阿里云解析 REGION出现错误再修改 默认不需要修改 https://help.aliyun.com/document_detail/198326.html
-REGION_ALI = 'cn-hongkong'
-
-#解析生效时间，默认为600秒 如果不是DNS付费版用户 不要修改!!!
-TTL = 600
-
-#v4为筛选出IPv4的IP  v6为筛选出IPv6的IP
-TYPE = 'v4'
-
-#API 密钥
-#腾讯云后台获取 https://console.cloud.tencent.com/cam/capi
-#阿里云后台获取 https://help.aliyun.com/document_detail/53045.html?spm=a2c4g.11186623.2.11.2c6a2fbdh13O53  注意需要添加DNS控制权限 AliyunDNSFullAccess
-#华为云后台获取 https://support.huaweicloud.com/devg-apisign/api-sign-provide-aksk.html
-SECRETID = 'WTTCWxxxxxxxxxxxxxxxxxxxxx84O0V'
-SECRETKEY = 'GXkG6D4X1Nxxxxxxxxxxxxxxxxxxxxx4lRg6lT'
-
-log_cf2dns = Logger('cf2dns.log', level='debug') 
+log_cf2dns = Logger('logs/cf2dns.log', level='debug') 
 
 def get_optimization_ip():
     try:
@@ -115,7 +107,7 @@ def changeDNS(line, s_info, c_info, domain, sub_domain, cloud):
             log_cf2dns.logger.error("CHANGE DNS ERROR: ----Time: " + str(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())) + "----MESSAGE: " + str(e))
 
 def main(cloud):
-    global AFFECT_NUM, TYPE
+    global AFFECT_NUM, TYPE, DOMAINS
     if TYPE == 'v6':
         recordType = "AAAA"
     else:
@@ -185,10 +177,14 @@ def main(cloud):
             log_cf2dns.logger.error("CHANGE DNS ERROR: ----Time: " + str(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())) + "----MESSAGE: " + str(e))
 
 if __name__ == '__main__':
+    cloud = None
     if DNS_SERVER == 1:
         cloud = QcloudApiv3(SECRETID, SECRETKEY)
     elif DNS_SERVER == 2:
         cloud = AliApi(SECRETID, SECRETKEY, REGION_ALI)
     elif DNS_SERVER == 3:
         cloud = HuaWeiApi(SECRETID, SECRETKEY, REGION_HW)
-    main(cloud)
+    while(True):
+        main(cloud)
+        log_cf2dns.logger.error("CHANGE DNS SUCCESS: ----Time: " + str(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())) + "----MESSAGE: ALL DONE" )
+        time.sleep(TIMES)
